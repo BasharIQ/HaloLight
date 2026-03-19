@@ -14,7 +14,6 @@
 
     <Icon Id="HaloLightIcon.ico" SourceFile="$(var.RepoRoot)\src\HaloLight\Assets\AppIcon.ico" />
     <Property Id="ARPPRODUCTICON" Value="HaloLightIcon.ico" />
-    <Property Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="LocalAppDataFolder">
@@ -38,6 +37,8 @@
           WorkingDirectory="INSTALLFOLDER"
           Advertise="no"
           Icon="HaloLightIcon.ico" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        <RemoveFolder Id="RemoveInstallRoot" Directory="INSTALLROOT" On="uninstall" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\HaloLight" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
