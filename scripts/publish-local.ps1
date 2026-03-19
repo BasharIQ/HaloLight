@@ -14,7 +14,6 @@ $packageKind = if ($SelfContained) { "self-contained" } else { "framework-depend
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot $Project
 $publishDir = Join-Path $repoRoot ("artifacts\publish\{0}\{1}" -f $Runtime, $packageKind)
-$zipPath = Join-Path $repoRoot ("artifacts\HaloLight-{0}-{1}.zip" -f $Runtime, $packageKind)
 
 $publishArgs = @(
     "publish",
@@ -46,14 +45,7 @@ New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
 & dotnet @publishArgs
 
-if (Test-Path $zipPath) {
-    Remove-Item $zipPath -Force
-}
-
-Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath
-
 Write-Host "Created publish folder: $publishDir"
-Write-Host "Created zip package:   $zipPath"
 Write-Host "Package type:          $packageKind"
 if (-not [string]::IsNullOrWhiteSpace($AppVersion)) {
     Write-Host "App version:           $AppVersion"

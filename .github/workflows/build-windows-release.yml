@@ -84,7 +84,7 @@ jobs:
 
       - name: Install packaging tools
         shell: pwsh
-        run: choco install innosetup wixtoolset --no-progress --yes
+        run: choco install innosetup --no-progress --yes
 
       - name: Publish self-contained app
         shell: pwsh
@@ -94,10 +94,6 @@ jobs:
         shell: pwsh
         run: .\scripts\build-installer.ps1 -SkipPublish -AppVersion "${{ steps.version.outputs.version }}"
 
-      - name: Build MSI
-        shell: pwsh
-        run: .\scripts\build-msi.ps1 -SkipPublish -AppVersion "${{ steps.version.outputs.version }}"
-
       - name: Upload release files
         uses: actions/upload-artifact@v4
         with:
@@ -106,10 +102,7 @@ jobs:
           compression-level: 0
           retention-days: 30
           path: |
-            artifacts\HaloLight-win-x64-self-contained.zip
-            artifacts\publish\win-x64\self-contained\HaloLight.exe
             artifacts\installer\*.exe
-            artifacts\installer\*.msi
 
       - name: Create and push tag
         if: github.event_name == 'push' && steps.version.outputs.tag_exists != 'true'
@@ -127,10 +120,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           $assetPatterns = @(
-            'artifacts\HaloLight-win-x64-self-contained.zip',
-            'artifacts\publish\win-x64\self-contained\HaloLight.exe',
-            'artifacts\installer\*.exe',
-            'artifacts\installer\*.msi'
+            'artifacts\installer\*.exe'
           )
 
           $assets = foreach ($pattern in $assetPatterns) {
