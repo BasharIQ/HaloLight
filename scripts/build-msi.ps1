@@ -9,6 +9,38 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function ConvertTo-MsiVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Version
+    )
+
+    $parts = $Version.Split('.')
+    if ($parts.Count -lt 1 -or $parts.Count -gt 4) {
+        throw "MSI version must have between 1 and 4 numeric parts: $Version"
+    }
+
+    $normalizedParts = @()
+    foreach ($part in $parts) {
+        $value = 0
+        if (-not [int]::TryParse($part, [ref]$value)) {
+            throw "MSI version parts must be numeric: $Version"
+        }
+
+        if ($value -lt 0 -or $value -gt 65534) {
+            throw "MSI version parts must be between 0 and 65534: $Version"
+        }
+
+        $normalizedParts += $value
+    }
+
+    while ($normalizedParts.Count -lt 4) {
+        $normalizedParts += 0
+    }
+
+    return ($normalizedParts -join '.')
+}
+
 function Get-ToolPath {
     param(
         [Parameter(Mandatory = $true)]
@@ -29,6 +61,20 @@ function Get-ToolPath {
     }
 
     throw "Required tool not found: $CommandName"
+}
+
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code $LASTEXITCODE: $FilePath"
+    }
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -80,6 +126,8 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     $version = "0.1.0"
 }
 
+$msiVersion = ConvertTo-MsiVersion -Version $version
+
 $heatPath = Get-ToolPath -CommandName "heat.exe" -CandidatePaths @(
     "C:\Program Files (x86)\WiX Toolset v3.14\bin\heat.exe",
     "C:\Program Files\WiX Toolset v3.14\bin\heat.exe"
@@ -109,32 +157,39 @@ if (Test-Path $msiPath) {
     Remove-Item $msiPath -Force
 }
 
-& $heatPath dir $publishDir `
-    -nologo `
-    -cg PublishedFiles `
-    -dr INSTALLFOLDER `
-    -srd `
-    -scom `
-    -sreg `
-    -gg `
-    -var var.PublishDir `
-    -out $harvestedFile
+Invoke-NativeCommand -FilePath $heatPath -Arguments @(
+    'dir',
+    $publishDir,
+    '-nologo',
+    '-cg', 'PublishedFiles',
+    '-dr', 'INSTALLFOLDER',
+    '-srd',
+    '-scom',
+    '-sreg',
+    '-gg',
+    '-var', 'var.PublishDir',
+    '-out', $harvestedFile
+)
 
-& $candlePath `
-    -nologo `
-    -arch x64 `
-    -dAppVersion=$version `
-    -dPublishDir=$publishDir `
-    -dRepoRoot=$repoRoot `
-    -out (Join-Path $tempDir "") `
-    $msiTemplate `
+Invoke-NativeCommand -FilePath $candlePath -Arguments @(
+    '-nologo',
+    '-arch', 'x64',
+    "-dAppVersion=$version",
+    "-dMsiVersion=$msiVersion",
+    "-dPublishDir=$publishDir",
+    "-dRepoRoot=$repoRoot",
+    '-out', (Join-Path $tempDir ''),
+    $msiTemplate,
     $harvestedFile
+)
 
-& $lightPath `
-    -nologo `
-    -out $msiPath `
-    (Join-Path $tempDir "HaloLight.msi.wixobj") `
-    (Join-Path $tempDir "PublishedFiles.wixobj")
+Invoke-NativeCommand -FilePath $lightPath -Arguments @(
+    '-nologo',
+    '-out', $msiPath,
+    (Join-Path $tempDir 'HaloLight.msi.wixobj'),
+    (Join-Path $tempDir 'PublishedFiles.wixobj')
+)
 
 Write-Host "Created MSI installer: $msiPath"
 Write-Host "MSI package type:     $packageKind"
+Write-Host "MSI product version:  $msiVersion"
