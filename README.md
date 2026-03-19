@@ -5,7 +5,6 @@ HaloLight is a Windows desktop app that turns the edges of your display into a s
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/settings-window.png" alt="HaloLight settings window" width="360" />
   <img src="docs/screenshots/desktop-overlay.png" alt="HaloLight overlay preview on a neutral desktop background" width="560" />
 </p>
 
