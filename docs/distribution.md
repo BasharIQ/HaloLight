@@ -1,70 +1,54 @@
 # Distribution
 
-The lightest default package for HaloLight is a framework-dependent `win-x64` publish.
+The recommended release package for HaloLight is the Inno Setup `setup.exe` installer.
 
 ## Why this default
 
-- Smallest output size
-- Simple local distribution as a zip file
-- Good fit for lightweight zip-based Windows distribution
+- Best fit for normal Windows users
+- Includes shortcuts and uninstall support
+- Avoids confusion from multiple downloadable package types
 
-Use the self-contained option only when you need a no-prerequisite zip for machines that do not already have the .NET 8 Desktop Runtime installed.
+The publish script is still useful when you want a raw output folder for testing or manual packaging.
 
 ## Build packages
 
-Framework-dependent:
+Framework-dependent publish folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\publish-local.ps1
 ```
 
-Self-contained:
+Self-contained publish folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\publish-local.ps1 -SelfContained
 ```
 
-EXE installer (recommended default for non-technical users):
+Recommended installer (`setup.exe`):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-installer.ps1
 ```
 
-EXE installer using framework-dependent publish output:
+Installer using framework-dependent publish output:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-installer.ps1 -FrameworkDependent
 ```
 
-MSI installer:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-msi.ps1
-```
-
-MSI installer using framework-dependent publish output:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-msi.ps1 -FrameworkDependent
-```
-
 The EXE installer build requires `Inno Setup 6` with `ISCC.exe` available in `PATH` or installed in its default Windows location.
-
-The MSI installer build requires `WiX Toolset 3.14` with `heat.exe`, `candle.exe`, and `light.exe` available in `PATH` or installed in their default Windows location.
 
 ## Output
 
 - Publish folder: `artifacts\publish\win-x64\framework-dependent`
-- Zip package: `artifacts\HaloLight-win-x64-framework-dependent.zip`
 - EXE installer output: `artifacts\installer\HaloLight-0.1.0-Setup.exe`
-- MSI installer output: `artifacts\installer\HaloLight-0.1.0.msi`
 
 ## Automatic GitHub releases
 
 `.github/workflows/build-windows-release.yml` runs on pull requests targeting `main` and on pushes to `main`.
 
-- Pull requests use it as a packaging/build validation check only
-- Pushes to `main` also create the tag and publish the GitHub Release
+- Pull requests use it as an installer validation check only
+- Pushes to `main` also create the tag and publish the GitHub Release with the `setup.exe` asset
 
 - Release tags use the format `vX.Y.Z`
 - If the current commit already has a semver tag, reruns reuse that tag and update the existing release assets
