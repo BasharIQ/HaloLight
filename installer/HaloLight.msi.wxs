@@ -4,7 +4,7 @@
     Id="*"
     Name="HaloLight"
     Language="1033"
-    Version="$(var.AppVersion)"
+    Version="$(var.MsiVersion)"
     Manufacturer="HaloLight"
     UpgradeCode="C8A3D674-9E9F-4E7D-9274-958A262CD01D">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited" Platform="x64" />
