@@ -2,6 +2,13 @@
 
 HaloLight is a Windows desktop app that turns the edges of your display into a soft fill light for video calls. It uses a transparent overlay so you can brighten your face without giving up normal desktop interaction.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/settings-window.png" alt="HaloLight settings window" width="360" />
+  <img src="docs/screenshots/desktop-overlay.png" alt="HaloLight overlay preview on a neutral desktop background" width="560" />
+</p>
+
 ## What it does
 
 - Adds a soft light around the selected monitor
