@@ -61,7 +61,10 @@ The MSI installer build requires `WiX Toolset 3.14` with `heat.exe`, `candle.exe
 
 ## Automatic GitHub releases
 
-`.github/workflows/build-windows-release.yml` creates a GitHub Release automatically on pushes to `main`.
+`.github/workflows/build-windows-release.yml` runs on pull requests targeting `main` and on pushes to `main`.
+
+- Pull requests use it as a packaging/build validation check only
+- Pushes to `main` also create the tag and publish the GitHub Release
 
 - Release tags use the format `vX.Y.Z`
 - If the current commit already has a semver tag, reruns reuse that tag and update the existing release assets

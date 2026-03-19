@@ -75,9 +75,9 @@ Build outputs land under `artifacts\`.
 
 ## CI builds
 
-GitHub Actions runs `.github/workflows/build-windows-release.yml` on pushes to `main`, plus manual dispatch. Each run builds a self-contained Windows publish, an Inno Setup EXE installer, and a WiX MSI installer, then uploads the `.exe`, `.zip`, `.msi`, and setup package as workflow artifacts.
+GitHub Actions runs `.github/workflows/build-windows-release.yml` on pull requests targeting `main`, on pushes to `main`, and on manual dispatch. Each run builds a self-contained Windows publish, an Inno Setup EXE installer, and a WiX MSI installer, then uploads the `.exe`, `.zip`, `.msi`, and setup package as workflow artifacts.
 
-The workflow also creates or reuses a `vX.Y.Z` tag and publishes a GitHub Release automatically. If no release tags exist yet, it starts from the version in `src\HaloLight\HaloLight.csproj`. After that it bumps the patch version on each new push, unless the project version is manually moved ahead to start a new minor or major line.
+On pull requests it works as a build check only. On pushes to `main` it also creates or reuses a `vX.Y.Z` tag and publishes a GitHub Release automatically. If no release tags exist yet, it starts from the version in `src\HaloLight\HaloLight.csproj`. After that it bumps the patch version on each new push, unless the project version is manually moved ahead to start a new minor or major line.
 
 ## Local settings
 

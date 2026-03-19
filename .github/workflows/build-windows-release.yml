@@ -11,6 +11,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -109,13 +112,14 @@ jobs:
             artifacts\installer\*.msi
 
       - name: Create and push tag
-        if: steps.version.outputs.tag_exists != 'true'
+        if: github.event_name == 'push' && steps.version.outputs.tag_exists != 'true'
         shell: pwsh
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create or update GitHub Release
+        if: github.event_name == 'push'
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

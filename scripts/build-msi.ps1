@@ -73,7 +73,7 @@ function Invoke-NativeCommand {
 
     & $FilePath @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE: $FilePath"
+        throw "Command failed with exit code ${LASTEXITCODE}: $FilePath"
     }
 }
 
