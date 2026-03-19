@@ -77,6 +77,41 @@ function Invoke-NativeCommand {
     }
 }
 
+function Update-HarvestedWixFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    [xml]$wixXml = Get-Content -Path $FilePath
+    $namespaceManager = New-Object System.Xml.XmlNamespaceManager($wixXml.NameTable)
+    $namespaceManager.AddNamespace('wix', 'http://schemas.microsoft.com/wix/2006/wi')
+
+    $components = $wixXml.SelectNodes('//wix:Component', $namespaceManager)
+    foreach ($component in $components) {
+        $fileNode = $component.SelectSingleNode('wix:File[@KeyPath="yes"]', $namespaceManager)
+        if ($fileNode -ne $null) {
+            $fileNode.SetAttribute('KeyPath', 'no')
+        }
+
+        $componentId = $component.GetAttribute('Id')
+        if ([string]::IsNullOrWhiteSpace($componentId)) {
+            throw 'Harvested WiX component is missing an Id attribute.'
+        }
+
+        $registryValue = $wixXml.CreateElement('RegistryValue', $wixXml.DocumentElement.NamespaceURI)
+        $registryValue.SetAttribute('Root', 'HKCU')
+        $registryValue.SetAttribute('Key', 'Software\HaloLight\Components')
+        $registryValue.SetAttribute('Name', $componentId)
+        $registryValue.SetAttribute('Type', 'integer')
+        $registryValue.SetAttribute('Value', '1')
+        $registryValue.SetAttribute('KeyPath', 'yes')
+        $null = $component.AppendChild($registryValue)
+    }
+
+    $wixXml.Save($FilePath)
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot $Project
 $publishScript = Join-Path $PSScriptRoot "publish-local.ps1"
@@ -170,6 +205,8 @@ Invoke-NativeCommand -FilePath $heatPath -Arguments @(
     '-var', 'var.PublishDir',
     '-out', $harvestedFile
 )
+
+Update-HarvestedWixFile -FilePath $harvestedFile
 
 Invoke-NativeCommand -FilePath $candlePath -Arguments @(
     '-nologo',
