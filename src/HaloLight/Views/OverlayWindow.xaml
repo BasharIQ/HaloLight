@@ -1,0 +1,31 @@
+<Window x:Class="HaloLight.Views.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Focusable="False"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Topmost="True"
+        Opacity="0"
+        WindowStyle="None">
+    <Grid x:Name="GlowRoot"
+          IsHitTestVisible="False"
+          SnapsToDevicePixels="False">
+        <Rectangle x:Name="ColorRing"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"
+                   Fill="Transparent"
+                   StrokeLineJoin="Round"
+                   StrokeStartLineCap="Round"
+                   StrokeEndLineCap="Round" />
+        <Rectangle x:Name="WhiteRing"
+                   HorizontalAlignment="Stretch"
+                   VerticalAlignment="Stretch"
+                   Fill="Transparent"
+                   StrokeLineJoin="Round"
+                   StrokeStartLineCap="Round"
+                   StrokeEndLineCap="Round" />
+    </Grid>
+</Window>

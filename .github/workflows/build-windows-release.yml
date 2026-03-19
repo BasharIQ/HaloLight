@@ -1,0 +1,142 @@
+name: Build Windows release
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release version
+        id: version
+        shell: pwsh
+        run: |
+          git fetch --force --tags
+          [xml]$projectXml = Get-Content -Path '.\src\HaloLight\HaloLight.csproj'
+          $baseVersionText = $projectXml.Project.PropertyGroup.Version | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($baseVersionText)) {
+            throw 'Project version is missing from src\\HaloLight\\HaloLight.csproj.'
+          }
+
+          $baseVersion = [Version]$baseVersionText
+          $tagPattern = '^v\d+\.\d+\.\d+$'
+
+          $headTag = git tag --points-at HEAD |
+            Where-Object { $_ -match $tagPattern } |
+            Sort-Object { [Version]$_.Substring(1) } |
+            Select-Object -Last 1
+
+          if ($headTag) {
+            $releaseTag = $headTag
+            $releaseVersion = $headTag.Substring(1)
+            $tagExists = 'true'
+          }
+          else {
+            $latestTag = git tag --list |
+              Where-Object { $_ -match $tagPattern } |
+              Sort-Object { [Version]$_.Substring(1) } |
+              Select-Object -Last 1
+
+            if ($latestTag) {
+              $latestVersion = [Version]$latestTag.Substring(1)
+              $incrementedVersion = [Version]::new($latestVersion.Major, $latestVersion.Minor, $latestVersion.Build + 1)
+              $nextVersion = if ($baseVersion -gt $latestVersion) { $baseVersion } else { $incrementedVersion }
+            }
+            else {
+              $nextVersion = $baseVersion
+            }
+
+            $releaseVersion = '{0}.{1}.{2}' -f $nextVersion.Major, $nextVersion.Minor, $nextVersion.Build
+            $releaseTag = 'v{0}' -f $releaseVersion
+            $tagExists = 'false'
+          }
+
+          "version=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "tag_exists=$tagExists" >> $env:GITHUB_OUTPUT
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore .\HaloLight.sln
+
+      - name: Install packaging tools
+        shell: pwsh
+        run: choco install innosetup wixtoolset --no-progress --yes
+
+      - name: Publish self-contained app
+        shell: pwsh
+        run: .\scripts\publish-local.ps1 -SelfContained -AppVersion "${{ steps.version.outputs.version }}"
+
+      - name: Build installer
+        shell: pwsh
+        run: .\scripts\build-installer.ps1 -SkipPublish -AppVersion "${{ steps.version.outputs.version }}"
+
+      - name: Build MSI
+        shell: pwsh
+        run: .\scripts\build-msi.ps1 -SkipPublish -AppVersion "${{ steps.version.outputs.version }}"
+
+      - name: Upload release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaloLight-windows-release-${{ steps.version.outputs.tag }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+          path: |
+            artifacts\HaloLight-win-x64-self-contained.zip
+            artifacts\publish\win-x64\self-contained\HaloLight.exe
+            artifacts\installer\*.exe
+            artifacts\installer\*.msi
+
+      - name: Create and push tag
+        if: steps.version.outputs.tag_exists != 'true'
+        shell: pwsh
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $assetPatterns = @(
+            'artifacts\HaloLight-win-x64-self-contained.zip',
+            'artifacts\publish\win-x64\self-contained\HaloLight.exe',
+            'artifacts\installer\*.exe',
+            'artifacts\installer\*.msi'
+          )
+
+          $assets = foreach ($pattern in $assetPatterns) {
+            Get-Item -Path $pattern | ForEach-Object { $_.FullName }
+          }
+
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $assets --clobber
+          }
+          else {
+            gh release create $env:RELEASE_TAG $assets --title "HaloLight $env:RELEASE_VERSION" --generate-notes
+          }

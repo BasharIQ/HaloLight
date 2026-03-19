@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="HaloLight"
+    Language="1033"
+    Version="$(var.AppVersion)"
+    Manufacturer="HaloLight"
+    UpgradeCode="C8A3D674-9E9F-4E7D-9274-958A262CD01D">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited" Platform="x64" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of HaloLight is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="HaloLightIcon.ico" SourceFile="$(var.RepoRoot)\src\HaloLight\Assets\AppIcon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="HaloLightIcon.ico" />
+    <Property Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="INSTALLROOT" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="HaloLight" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="HaloLight" />
+      </Directory>
+    </Directory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="AppShortcuts" Guid="*">
+        <Shortcut
+          Id="StartMenuShortcut"
+          Directory="ApplicationProgramsFolder"
+          Name="HaloLight"
+          Description="Virtual display-edge ring light for Windows video calls."
+          Target="[INSTALLFOLDER]HaloLight.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Advertise="no"
+          Icon="HaloLightIcon.ico" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\HaloLight" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="MainFeature" Title="HaloLight" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="AppShortcuts" />
+    </Feature>
+  </Product>
+</Wix>
