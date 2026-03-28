@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media.Animation;
 using System.Windows.Media;
@@ -9,19 +10,34 @@ using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
 using Point = System.Windows.Point;
+using Size = System.Windows.Size;
+using WinForms = System.Windows.Forms;
 
 namespace HaloLight.Views;
 
 public partial class OverlayWindow : Window
 {
+    private const double HoverFollowResponsiveness = 24d;
     private static readonly Duration FadeDuration = TimeSpan.FromMilliseconds(160);
     private AppSettings _settings = new();
     private DisplayInfo? _display;
+    private readonly Stopwatch _hoverFrameClock = new();
+    private readonly GeometryGroup _peekClip = new() { FillRule = FillRule.EvenOdd };
+    private readonly RectangleGeometry _peekSurfaceGeometry = new();
+    private readonly EllipseGeometry _peekHoleGeometry = new();
+    private Rect? _currentPeekCutout;
+    private Rect? _targetPeekCutout;
+    private Size _peekSurfaceSize;
+    private double _lastHoverFrameSeconds;
+    private bool _isHoverRenderingActive;
     private bool _sourceReady;
 
     public OverlayWindow()
     {
         InitializeComponent();
+        _peekClip.Children.Add(_peekSurfaceGeometry);
+        _peekClip.Children.Add(_peekHoleGeometry);
+        Closed += OnClosed;
     }
 
     public void ApplySettings(AppSettings settings, DisplayInfo display)
@@ -53,6 +69,7 @@ public partial class OverlayWindow : Window
             Show();
         }
 
+        StartHoverTracking();
         BeginAnimation(OpacityProperty, CreateOpacityAnimation(1));
     }
 
@@ -60,6 +77,7 @@ public partial class OverlayWindow : Window
     {
         if (!IsVisible)
         {
+            StopHoverTracking();
             return;
         }
 
@@ -68,6 +86,7 @@ public partial class OverlayWindow : Window
         {
             if (Opacity <= 0.01)
             {
+                StopHoverTracking();
                 Hide();
             }
         };
@@ -80,6 +99,12 @@ public partial class OverlayWindow : Window
         base.OnSourceInitialized(e);
         _sourceReady = true;
         ApplyNativeWindowState();
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        StopHoverTracking();
+        Closed -= OnClosed;
     }
 
     private void ApplyEdgeLayout(double thickness)
@@ -125,6 +150,250 @@ public partial class OverlayWindow : Window
         WindowStyleHelper.ApplyOverlayStyles(handle);
         WindowStyleHelper.PositionOverlay(handle, _display.Bounds);
         WindowStyleHelper.ApplyCaptureExclusion(handle, _settings.ExcludeFromCapture);
+        UpdateHoverPeekMask();
+    }
+
+    private void StartHoverTracking()
+    {
+        UpdateHoverPeekMask();
+
+        if (_currentPeekCutout is Rect peekCutout)
+        {
+            ApplyPeekCutout(peekCutout);
+        }
+
+        _hoverFrameClock.Restart();
+        _lastHoverFrameSeconds = 0d;
+
+        if (!_isHoverRenderingActive)
+        {
+            CompositionTarget.Rendering += OnCompositionTargetRendering;
+            _isHoverRenderingActive = true;
+        }
+    }
+
+    private void StopHoverTracking()
+    {
+        if (_isHoverRenderingActive)
+        {
+            CompositionTarget.Rendering -= OnCompositionTargetRendering;
+            _isHoverRenderingActive = false;
+        }
+
+        _hoverFrameClock.Reset();
+        _lastHoverFrameSeconds = 0d;
+
+        ClearHoverPeekMask();
+    }
+
+    private void OnCompositionTargetRendering(object? sender, EventArgs e)
+    {
+        UpdateHoverPeekMask();
+
+        var elapsedSeconds = _hoverFrameClock.Elapsed.TotalSeconds;
+        var deltaSeconds = Math.Max(1d / 240d, elapsedSeconds - _lastHoverFrameSeconds);
+        _lastHoverFrameSeconds = elapsedSeconds;
+
+        AnimateHoverPeek(deltaSeconds);
+    }
+
+    private void UpdateHoverPeekMask()
+    {
+        if (!IsVisible || _display is null)
+        {
+            _targetPeekCutout = null;
+            return;
+        }
+
+        var cursor = WinForms.Cursor.Position;
+        var bounds = _display.Bounds;
+
+        if (!bounds.Contains(cursor))
+        {
+            _targetPeekCutout = null;
+            return;
+        }
+
+        var edgeBand = GetHoverPeekBandSize();
+        if (edgeBand <= 0)
+        {
+            _targetPeekCutout = null;
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var localX = (cursor.X - bounds.Left) / dpi.DpiScaleX;
+        var localY = (cursor.Y - bounds.Top) / dpi.DpiScaleY;
+        var width = Math.Max(1d, bounds.Width / dpi.DpiScaleX);
+        var height = Math.Max(1d, bounds.Height / dpi.DpiScaleY);
+
+        _peekSurfaceSize = new Size(width, height);
+
+        if (!TryGetPeekCutout(localX, localY, width, height, edgeBand, out var peekCutout))
+        {
+            _targetPeekCutout = null;
+            return;
+        }
+
+        _targetPeekCutout = peekCutout;
+
+        if (_currentPeekCutout is null)
+        {
+            _currentPeekCutout = peekCutout;
+        }
+    }
+
+    private void AnimateHoverPeek(double deltaSeconds)
+    {
+        if (_targetPeekCutout is null)
+        {
+            if (_currentPeekCutout is not Rect currentPeekCutout)
+            {
+                if (GlowRoot.Clip is not null)
+                {
+                    GlowRoot.Clip = null;
+                }
+
+                return;
+            }
+
+            var collapsedCutout = CollapseRect(currentPeekCutout);
+            var easedOutCutout = LerpRect(currentPeekCutout, collapsedCutout, GetBlendFactor(deltaSeconds));
+            if (easedOutCutout.Width <= 2d || easedOutCutout.Height <= 2d)
+            {
+                ClearHoverPeekMask();
+                return;
+            }
+
+            _currentPeekCutout = easedOutCutout;
+            ApplyPeekCutout(easedOutCutout);
+            return;
+        }
+
+        var nextPeekCutout = _currentPeekCutout is Rect activePeekCutout
+            ? LerpRect(activePeekCutout, _targetPeekCutout.Value, GetBlendFactor(deltaSeconds))
+            : _targetPeekCutout.Value;
+
+        if (AreClose(nextPeekCutout, _targetPeekCutout.Value))
+        {
+            nextPeekCutout = _targetPeekCutout.Value;
+        }
+
+        _currentPeekCutout = nextPeekCutout;
+        ApplyPeekCutout(nextPeekCutout);
+    }
+
+    private void ApplyPeekCutout(Rect peekCutout)
+    {
+        _peekSurfaceGeometry.Rect = new Rect(0, 0, _peekSurfaceSize.Width, _peekSurfaceSize.Height);
+        _peekHoleGeometry.Center = new Point(peekCutout.X + (peekCutout.Width / 2d), peekCutout.Y + (peekCutout.Height / 2d));
+        _peekHoleGeometry.RadiusX = peekCutout.Width / 2d;
+        _peekHoleGeometry.RadiusY = peekCutout.Height / 2d;
+
+        if (!ReferenceEquals(GlowRoot.Clip, _peekClip))
+        {
+            GlowRoot.Clip = _peekClip;
+        }
+    }
+
+    private void ClearHoverPeekMask()
+    {
+        _currentPeekCutout = null;
+        _targetPeekCutout = null;
+        _peekSurfaceSize = default;
+
+        if (GlowRoot.Clip is not null)
+        {
+            GlowRoot.Clip = null;
+        }
+    }
+
+    private bool TryGetPeekCutout(double localX, double localY, double width, double height, double edgeBand, out Rect peekCutout)
+    {
+        var hoverBand = Math.Min(Math.Min(width, height) / 2d, Math.Max(edgeBand * 1.12, edgeBand + 18d));
+
+        if (!IsPointWithinHalo(localX, localY, width, height, hoverBand))
+        {
+            peekCutout = default;
+            return false;
+        }
+
+        var cutoutSize = Math.Max(140d, hoverBand * 1.2);
+        var cutoutWidth = Math.Min(cutoutSize, width);
+        var cutoutHeight = Math.Min(cutoutSize, height);
+        var cutoutLeft = Clamp(localX - cutoutWidth / 2d, 0, width - cutoutWidth);
+        var cutoutTop = Clamp(localY - cutoutHeight / 2d, 0, height - cutoutHeight);
+
+        peekCutout = new Rect(cutoutLeft, cutoutTop, cutoutWidth, cutoutHeight);
+        return true;
+    }
+
+    private bool IsPointWithinHalo(double localX, double localY, double width, double height, double hoverBand)
+    {
+        var innerWidth = width - (hoverBand * 2d);
+        var innerHeight = height - (hoverBand * 2d);
+        if (innerWidth <= 0 || innerHeight <= 0)
+        {
+            return true;
+        }
+
+        var innerRadiusX = Math.Max(0d, ColorRing.RadiusX - hoverBand);
+        var innerRadiusY = Math.Max(0d, ColorRing.RadiusY - hoverBand);
+        var innerBounds = new Rect(hoverBand, hoverBand, innerWidth, innerHeight);
+        var innerArea = new RectangleGeometry(innerBounds, innerRadiusX, innerRadiusY);
+
+        return !innerArea.FillContains(new Point(localX, localY));
+    }
+
+    private double GetHoverPeekBandSize()
+    {
+        var glowBlur = ColorRing.Effect is DropShadowEffect effect
+            ? effect.BlurRadius * 0.35
+            : 0d;
+
+        return Math.Max(0d, ColorRing.StrokeThickness + glowBlur);
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (max <= min)
+        {
+            return min;
+        }
+
+        return Math.Max(min, Math.Min(value, max));
+    }
+
+    private static bool AreClose(Rect left, Rect right)
+    {
+        const double tolerance = 0.75;
+        return Math.Abs(left.X - right.X) <= tolerance
+               && Math.Abs(left.Y - right.Y) <= tolerance
+               && Math.Abs(left.Width - right.Width) <= tolerance
+               && Math.Abs(left.Height - right.Height) <= tolerance;
+    }
+
+    private static double GetBlendFactor(double deltaSeconds)
+    {
+        return 1d - Math.Exp(-HoverFollowResponsiveness * deltaSeconds);
+    }
+
+    private static Rect LerpRect(Rect from, Rect to, double amount)
+    {
+        amount = Math.Clamp(amount, 0d, 1d);
+
+        return new Rect(
+            from.X + ((to.X - from.X) * amount),
+            from.Y + ((to.Y - from.Y) * amount),
+            from.Width + ((to.Width - from.Width) * amount),
+            from.Height + ((to.Height - from.Height) * amount));
+    }
+
+    private static Rect CollapseRect(Rect rect)
+    {
+        var centerX = rect.X + (rect.Width / 2d);
+        var centerY = rect.Y + (rect.Height / 2d);
+        return new Rect(centerX, centerY, 0, 0);
     }
 
     private static Color CreateStrokeColor(double colorTemperature, double brightness)
